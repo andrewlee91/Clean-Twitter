@@ -1,5 +1,6 @@
 import configparser
 import sys
+import time
 
 import tweepy
 
@@ -26,6 +27,17 @@ def Twitter_Auth():
     return tweepy.API(auth)
 
 
+def Rate_Limit(cursor):
+    while True:
+        try:
+            yield cursor.next()
+        except tweepy.RateLimitError:
+            print(
+                "You are currently being rate limited. Waiting for 5 minutes then trying to resume."
+            )
+            time.sleep(5 * 60)
+
+
 def Check_Arguments(api):
     if len(sys.argv) == 1:
         print(
@@ -43,7 +55,7 @@ def Check_Arguments(api):
 
 
 def Delete_Tweets(api):
-    user_tweets = tweepy.Cursor(api.user_timeline, count=200).items()
+    user_tweets = Rate_Limit(tweepy.Cursor(api.user_timeline).items())
 
     for tweet in user_tweets:
         print(
@@ -53,7 +65,7 @@ def Delete_Tweets(api):
 
 
 def Delete_Likes(api):
-    likes = tweepy.Cursor(api.favorites, count=200).items()
+    likes = Rate_Limit(tweepy.Cursor(api.favorites).items())
 
     for tweet in likes:
         print(

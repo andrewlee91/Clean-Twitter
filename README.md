@@ -22,7 +22,6 @@ access_token_secret=
 
 ## To-Do
 - [ ] Proper error handling 
-- [ ] Rate limiting
 - [ ] Improved command line usage
 - [ ] Save deleted tweets/likes in an external file
 - [ ] Delete tweets before/after a specified date
