@@ -1,10 +1,26 @@
+import argparse
 import configparser
+import os
 import sys
 import time
 
 import tweepy
 
+directory = os.path.dirname(os.path.realpath(__file__))
+
 config = configparser.ConfigParser()
+
+parser = argparse.ArgumentParser(
+    description="Scrub tweets and likes from your Twitter account."
+)
+
+parser.add_argument(
+    "--tweets", dest="tweets", help="Delete tweets", action="store_true"
+)
+parser.add_argument("--likes", dest="likes", help="Unlike tweets", action="store_true")
+parser.add_argument(
+    "--log", dest="logging", help="Log deleted/unliked tweets", action="store_true"
+)
 
 
 def Load_Config():
@@ -27,53 +43,58 @@ def Twitter_Auth():
     return tweepy.API(auth)
 
 
-def Rate_Limit(cursor):
-    while True:
-        try:
-            yield cursor.next()
-        except tweepy.RateLimitError:
-            print(
-                "You are currently being rate limited. Waiting for 5 minutes then trying to resume."
-            )
-            time.sleep(5 * 60)
+def Delete_Tweets(api, log=False):
+    deleted_file = f"{directory}/tweets.txt"
+    tweets = tweepy.Cursor(api.user_timeline).items()
 
+    for tweet in tweets:
+        if hasattr(tweet, "retweeted_status"):
+            if log:
+                url = tweet.retweeted_status.entities["urls"][0]["expanded_url"]
+                log_message = f"{tweet.text} - {url}\n"
+                with open(deleted_file, "a") as log_file:
+                    log_file.write(log_message)
 
-def Check_Arguments(api):
-    if len(sys.argv) == 1:
-        print(
-            "No argument passed. Run 'python cleantwitter.py tweets' or 'python cleantwitter.py likes'."
-        )
-        quit()
-    else:
-        if sys.argv[1].lower() == "tweets":
-            Delete_Tweets(api)
-        elif sys.argv[1].lower() == "likes":
-            Delete_Likes(api)
+            api.unretweet(tweet.id)
         else:
-            print("Invalid arguement.")
-            quit()
+            if log:
+                log_message = f"{tweet.created_at}: {tweet.text}\n"
+                with open(deleted_file, "a") as log_file:
+                    log_file.write(log_message)
+
+            api.destroy_status(tweet.id)
 
 
-def Delete_Tweets(api):
-    user_tweets = Rate_Limit(tweepy.Cursor(api.user_timeline).items())
-
-    for tweet in user_tweets:
-        print(
-            f"Deleting status with id: {tweet.id_str} from user: {tweet.user.screen_name}"
-        )
-        api.destroy_status(tweet.id_str)
-
-
-def Delete_Likes(api):
-    likes = Rate_Limit(tweepy.Cursor(api.favorites).items())
+def Delete_Likes(api, log=False):
+    unliked_file = f"{directory}/likes.txt"
+    likes = tweepy.Cursor(api.favorites).items()
 
     for tweet in likes:
-        print(
-            f"Deleting status with id: {tweet.id_str} from user: {tweet.user.screen_name}"
-        )
-        api.destroy_favorite(tweet.id_str)
+        if log:
+            tweet_url = (
+                f"https://twitter.com/{tweet.user.screen_name}/status/{tweet.id_str}\n"
+            )
+
+            with open(unliked_file, "a") as log_file:
+                log_file.write(tweet_url)
+
+        api.destroy_favorite(tweet.id)
 
 
 if __name__ == "__main__":
     api = Twitter_Auth()
-    Check_Arguments(api)
+    api.wait_on_rate_limit = True
+    api.wait_on_rate_limit_notify = True
+    args = parser.parse_args()
+
+    if args.tweets:
+        if args.logging:
+            Delete_Tweets(api, True)
+        else:
+            Delete_Tweets(api)
+
+    if args.likes:
+        if args.logging:
+            Delete_Likes(api, True)
+        else:
+            Delete_Likes(api)
